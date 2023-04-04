@@ -5,6 +5,67 @@ import mimetypes
 from dotenv import load_dotenv
 from google.cloud import storage
 import os
+import openai
+import nltk
+from nltk.tokenize import word_tokenize, sent_tokenize
+from nltk.stem import WordNetLemmatizer
+
+
+
+
+def lemmatize_text(text):
+    """Lemmatize the extracted text."""
+    # nltk.download('punkt')
+    # nltk.download('wordnet')
+    # nltk.download('omw-1.4')
+
+    # nltk.download()
+
+    lemmatizer = WordNetLemmatizer()
+    # Tokenize the text into sentences
+    sentences = sent_tokenize(text)
+    # Tokenize each sentence into words, lemmatize them and join back into a sentence
+    lemmatized_sentences = []
+    for sentence in sentences:
+        words = word_tokenize(sentence)
+        lemmatized_words = []
+        for word in words:
+            lemmatized_word = lemmatizer.lemmatize(word)
+            lemmatized_words.append(lemmatized_word)
+        lemmatized_sentence = " ".join(lemmatized_words)
+        lemmatized_sentences.append(lemmatized_sentence)
+    # Join the lemmatized sentences back into a single string
+    lemmatized_text = " ".join(lemmatized_sentences)
+    return lemmatized_text
+
+
+def extract_info(text):
+    prompt = (
+        "Extract the Total Sales, Total Revenue, Total Valuation, and Owners Equity from the following text:\n\n"
+        f"{text}\n\n"
+        "Total Sales:\n"
+        "Total Revenue:\n"
+        "Total Valuation:\n"
+        "Owners Equity:\n"
+    )
+    response = openai.Completion.create(
+        engine="text-davinci-002",
+        prompt=prompt,
+        temperature=0.5,
+        max_tokens=1024,
+        n=1,
+        stop=None,
+        timeout=60,
+    )
+    if len(response.choices) > 0:
+        choices = response.choices[0]
+        sales = choices.text.split("Total Sales:")[1].split("\n")[0].strip()
+        revenue = choices.text.split("Total Revenue:")[1].split("\n")[0].strip()
+        valuation = choices.text.split("Total Valuation:")[1].split("\n")[0].strip()
+        equity = choices.text.split("Owners Equity:")[1].split("\n")[0].strip()
+        return sales, revenue, valuation, equity
+    else:
+        return None
 
 
 def setup_client():
@@ -18,6 +79,7 @@ def setup_client():
     client_options = {'api_endpoint': f'{location}-documentai.googleapis.com'}
     processor_name = f'projects/{project_id}/locations/{location}/processors/{processor_id}'
     client = documentai.DocumentProcessorServiceClient(client_options=client_options)
+    openai.api_key =os.environ.get('openai.api_key')
     return client, processor_name, credentials
 
 
@@ -37,7 +99,7 @@ def process_file(client, processor_name, uploaded_file, credentials):
         text = document.text
 
         # Display the extracted text on the Streamlit app
-        st.write(text)
+        # st.write(text)
 
         # Upload the extracted text to GCS
         storage_project_id = os.environ.get('project_id')
@@ -46,6 +108,18 @@ def process_file(client, processor_name, uploaded_file, credentials):
         bucket = storage_client.get_bucket(bucket_name)
         blob = bucket.blob('extract/extracted_text.txt')
         blob.upload_from_string(text)
+
+        text = lemmatize_text(text)
+        st.write(text)
+
+
+        # sales, revenue, valuation, equity = extract_info(text)
+        # st.write("Total Sales:", sales)
+        # st.write("Total Revenue:", revenue)
+        # st.write("Total Valuation:", valuation)
+        # st.write("Owners Equity:", equity)
+
+
 
 
 def main():
