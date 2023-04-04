@@ -7,11 +7,9 @@ from google.cloud import storage
 import os
 import openai
 import nltk
+import re
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.stem import WordNetLemmatizer
-
-
-
 
 def lemmatize_text(text):
     """Lemmatize the extracted text."""
@@ -22,10 +20,13 @@ def lemmatize_text(text):
     # nltk.download()
 
     lemmatizer = WordNetLemmatizer()
+    
     # Tokenize the text into sentences
     sentences = sent_tokenize(text)
+    
     # Tokenize each sentence into words, lemmatize them and join back into a sentence
     lemmatized_sentences = []
+    
     for sentence in sentences:
         words = word_tokenize(sentence)
         lemmatized_words = []
@@ -34,39 +35,97 @@ def lemmatize_text(text):
             lemmatized_words.append(lemmatized_word)
         lemmatized_sentence = " ".join(lemmatized_words)
         lemmatized_sentences.append(lemmatized_sentence)
+    
     # Join the lemmatized sentences back into a single string
     lemmatized_text = " ".join(lemmatized_sentences)
     return lemmatized_text
 
-
-def extract_info(text):
+def extract_info(text):    
+    max_length = 1024
+    chunks = re.findall(r'.{1,%d}\b(?!\S)' % max_length, text)
     prompt = (
         "Extract the Total Sales, Total Revenue, Total Valuation, and Owners Equity from the following text:\n\n"
-        f"{text}\n\n"
         "Total Sales:\n"
         "Total Revenue:\n"
         "Total Valuation:\n"
         "Owners Equity:\n"
     )
-    response = openai.Completion.create(
-        engine="text-davinci-002",
-        prompt=prompt,
-        temperature=0.5,
-        max_tokens=1024,
-        n=1,
-        stop=None,
-        timeout=60,
-    )
-    if len(response.choices) > 0:
-        choices = response.choices[0]
-        sales = choices.text.split("Total Sales:")[1].split("\n")[0].strip()
-        revenue = choices.text.split("Total Revenue:")[1].split("\n")[0].strip()
-        valuation = choices.text.split("Total Valuation:")[1].split("\n")[0].strip()
-        equity = choices.text.split("Owners Equity:")[1].split("\n")[0].strip()
-        return sales, revenue, valuation, equity
-    else:
-        return None
 
+    # Send each chunk to the GPT API and collect the output
+    outputs = []
+    output_dict = {'Sales': [], 'Revenue': [], 'Valuation': [], 'Equity': []}
+    for chunk in chunks:
+        response = openai.Completion.create(
+            engine="text-davinci-002",
+            prompt=chunk + prompt,
+            max_tokens=1024,
+            n=1,
+            stop=None,
+            temperature=0.5,
+        )
+
+        # for choice in response.choices:
+        #     # Split the choice text into lines and extract the relevant information
+        #     choice_text = choice.text.strip()
+        #     lines = choice_text.split("\n")
+        #     sales, revenue, valuation, equity = "", "", "", ""
+        #     for line in lines:
+        #         if "Total Sales:" in line:
+        #             sales = line.split("Total Sales:")[1].strip()
+        #         elif "Total Revenue:" in line:
+        #             revenue = line.split("Total Revenue:")[1].strip()
+        #         elif "Total Valuation:" in line:
+        #             valuation = line.split("Total Valuation:")[1].strip()
+        #         elif "Owners Equity:" in line:
+        #             equity = line.split("Owners Equity:")[1].strip()
+            
+        #     # Append the relevant information to the output text
+        #     output_dict["Sales"].append(sales)
+        #     output_dict["Revenue"].append(revenue)
+        #     output_dict["Valuation"].append(valuation)
+        #     output_dict["Equity"].append(equity)
+
+        outputs.append(response.choices[0].text)
+        # choices = response.choices[0]
+        # sales = choices.text.split("Total Sales:").split("\n")[0].strip()
+        # revenue = choices.text.split("Total Revenue:").split("\n")[0].strip()
+        # valuation = choices.text.split("Total Valuation:").split("\n")[0].strip()
+        # equity = choices.text.split("Owners Equity:").split("\n")[0].strip()
+        # output_dict["Sales"].append(sales)
+        # output_dict["Revenue"].append(revenue)
+        # output_dict["Valuation"].append(valuation)
+        # output_dict["Equity"].append(equity)
+    
+    # Aggregate the output from each chunk
+    full_output = "\n\n".join(outputs)
+    return full_output
+    
+    # prompt = (
+    #     "Extract the Total Sales, Total Revenue, Total Valuation, and Owners Equity from the following text:\n\n"
+    #     f"{text}\n\n"
+    #     "Total Sales:\n"
+    #     "Total Revenue:\n"
+    #     "Total Valuation:\n"
+    #     "Owners Equity:\n"
+    # )
+    # response = openai.Completion.create(
+    #     engine="text-davinci-002",
+    #     prompt=prompt,
+    #     temperature=0.5,
+    #     max_tokens=1024,
+    #     n=1,
+    #     stop=None,
+    #     timeout=60,
+    # )
+    # if len(response.choices) > 0:
+    #     choices = response.choices[0]
+    #     sales = choices.text.split("Total Sales:")[1].split("\n")[0].strip()
+    #     revenue = choices.text.split("Total Revenue:")[1].split("\n")[0].strip()
+    #     valuation = choices.text.split("Total Valuation:")[1].split("\n")[0].strip()
+    #     equity = choices.text.split("Owners Equity:")[1].split("\n")[0].strip()
+    #     return sales, revenue, valuation, equity
+    # else:
+        # return None
 
 def setup_client():
     """Set up credentials and Document AI client."""
@@ -81,7 +140,6 @@ def setup_client():
     client = documentai.DocumentProcessorServiceClient(client_options=client_options)
     openai.api_key =os.environ.get('openai.api_key')
     return client, processor_name, credentials
-
 
 def process_file(client, processor_name, uploaded_file, credentials):
     """Process a file through the Document AI parser."""
@@ -98,9 +156,6 @@ def process_file(client, processor_name, uploaded_file, credentials):
         document = response.document
         text = document.text
 
-        # Display the extracted text on the Streamlit app
-        # st.write(text)
-
         # Upload the extracted text to GCS
         storage_project_id = os.environ.get('project_id')
         bucket_name = os.environ.get('bucket_name')
@@ -108,19 +163,17 @@ def process_file(client, processor_name, uploaded_file, credentials):
         bucket = storage_client.get_bucket(bucket_name)
         blob = bucket.blob('extract/extracted_text.txt')
         blob.upload_from_string(text)
-
         text = lemmatize_text(text)
-        st.write(text)
-
+        
+        st.write('')
+        info = extract_info(text)
+        st.write(info)
 
         # sales, revenue, valuation, equity = extract_info(text)
         # st.write("Total Sales:", sales)
         # st.write("Total Revenue:", revenue)
         # st.write("Total Valuation:", valuation)
         # st.write("Owners Equity:", equity)
-
-
-
 
 def main():
     # Set up client
@@ -135,7 +188,6 @@ def main():
             process_file(client, processor_name, uploaded_file, credentials)
         else:
             st.warning("No file uploaded.")
-
 
 if __name__ == '__main__':
     main()
