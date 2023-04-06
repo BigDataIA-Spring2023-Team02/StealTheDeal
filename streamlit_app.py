@@ -1,6 +1,6 @@
 import mimetypes
 import streamlit as st
-from main_functions import lemmatize_text, extract_info, setup_client, process_file
+from main_functions import extract_info, setup_client, process_file
 
 def upload_proposal_file():
     # Set up client
@@ -19,6 +19,10 @@ def upload_proposal_file():
                 process_file(mime_type, client, processor_name, uploaded_file, credentials)
         else:
             st.error("No file uploaded.")
+
+
+
+
 
 def main():
     st.title('StealTheDeal')

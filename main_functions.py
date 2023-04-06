@@ -8,6 +8,13 @@ from nltk.stem import WordNetLemmatizer
 from google.oauth2 import service_account
 from nltk.tokenize import word_tokenize, sent_tokenize
 from google.cloud import documentai_v1beta3 as documentai
+import streamlit as st
+import plotly.graph_objs as go
+import plotly.express as px
+import pandas as pd
+import matplotlib.pyplot as plt
+import locale
+
 
 def setup_client():
     """Set up credentials and Document AI client."""
@@ -50,12 +57,15 @@ def lemmatize_text(text):
     lemmatized_text = " ".join(lemmatized_sentences)
     return lemmatized_text
 
+
+
+
 def extract_info(text):    
-    max_length = 1024
+    max_length = 1000
     chunks = re.findall(r'.{1,%d}\b(?!\S)' % max_length, text)
     
     prompt = (
-        "Extract the Total Sales, Total Revenue, Total Valuation, and Owners Equity from the following text:\n\n"
+        "Extract and convert into the integer value of Total Sales, Total Revenue, Total Valuation, and Owners Equity from the following text and just give me the number with it value if the number have text convert it into its numberic form:\n\n"
         "Total Sales:\n"
         "Total Revenue:\n"
         "Total Valuation:\n"
@@ -76,69 +86,32 @@ def extract_info(text):
             temperature=0.5,
         )
 
-        # for choice in response.choices:
-        #     # Split the choice text into lines and extract the relevant information
-        #     choice_text = choice.text.strip()
-        #     lines = choice_text.split("\n")
-        #     sales, revenue, valuation, equity = "", "", "", ""
-        #     for line in lines:
-        #         if "Total Sales:" in line:
-        #             sales = line.split("Total Sales:")[1].strip()
-        #         elif "Total Revenue:" in line:
-        #             revenue = line.split("Total Revenue:")[1].strip()
-        #         elif "Total Valuation:" in line:
-        #             valuation = line.split("Total Valuation:")[1].strip()
-        #         elif "Owners Equity:" in line:
-        #             equity = line.split("Owners Equity:")[1].strip()
-            
-        #     # Append the relevant information to the output text
-        #     output_dict["Sales"].append(sales)
-        #     output_dict["Revenue"].append(revenue)
-        #     output_dict["Valuation"].append(valuation)
-        #     output_dict["Equity"].append(equity)
+        for choice in response.choices:
+            # Split the choice text into lines and extract the relevant information
+            choice_text = choice.text.strip()
+            lines = choice_text.split("\n")
+            sales, revenue, valuation, equity = "", "", "", ""
+            for line in lines:
+                if "Total Sales:" in line:
+                    sales = (line.split("Total Sales:")[1].split("\n")[0].strip())
+                elif "Total Revenue:" in line:
+                    revenue = (line.split("Total Revenue:")[1].split("\n")[0].strip())
+                elif "Total Valuation:" in line:
+                    valuation = (line.split("Total Valuation:")[1].split("\n")[0].strip())
+                elif "Owners Equity:" in line:
+                    equity = (line.split("Owners Equity:")[1].split("\n")[0].strip())
 
-        # choices = response.choices[0]
-        # sales = choices.text.split("Total Sales:").split("\n")[0].strip()
-        # revenue = choices.text.split("Total Revenue:").split("\n")[0].strip()
-        # valuation = choices.text.split("Total Valuation:").split("\n")[0].strip()
-        # equity = choices.text.split("Owners Equity:").split("\n")[0].strip()
-        # output_dict["Sales"].append(sales)
-        # output_dict["Revenue"].append(revenue)
-        # output_dict["Valuation"].append(valuation)
-        # output_dict["Equity"].append(equity)
-        
-        outputs.append(response.choices[0].text)
-        
-    # Aggregate the output from each chunk
-    full_output = "\n\n".join(outputs)
-    return full_output
+            # Append the relevant information to the output dictionary
+            output_dict["Sales"].append(sales)
+            output_dict["Revenue"].append(revenue)
+            output_dict["Valuation"].append(valuation)
+            output_dict["Equity"].append(equity)
+            for key in output_dict:
+                 output_dict[key] = [convert_to_float(value) for value in output_dict[key]]
+    return output_dict
+
     
-    # prompt = (
-    #     "Extract the Total Sales, Total Revenue, Total Valuation, and Owners Equity from the following text:\n\n"
-    #     f"{text}\n\n"
-    #     "Total Sales:\n"
-    #     "Total Revenue:\n"
-    #     "Total Valuation:\n"
-    #     "Owners Equity:\n"
-    # )
-    # response = openai.Completion.create(
-    #     engine="text-davinci-002",
-    #     prompt=prompt,
-    #     temperature=0.5,
-    #     max_tokens=1024,
-    #     n=1,
-    #     stop=None,
-    #     timeout=60,
-    # )
-    # if len(response.choices) > 0:
-    #     choices = response.choices[0]
-    #     sales = choices.text.split("Total Sales:")[1].split("\n")[0].strip()
-    #     revenue = choices.text.split("Total Revenue:")[1].split("\n")[0].strip()
-    #     valuation = choices.text.split("Total Valuation:")[1].split("\n")[0].strip()
-    #     equity = choices.text.split("Owners Equity:")[1].split("\n")[0].strip()
-    #     return sales, revenue, valuation, equity
-    # else:
-        # return None
+   
 
 def process_file(mime_type, client, processor_name, uploaded_file, credentials):
     """Process a file through the Document AI parser."""
@@ -161,10 +134,42 @@ def process_file(mime_type, client, processor_name, uploaded_file, credentials):
     text = lemmatize_text(text)
     
     info = extract_info(text)
+    st.write(info)
+    invest = evaluate_investability(text)
+    st.write(invest)
     return info
     
-    # sales, revenue, valuation, equity = extract_info(text)
-    # st.write("Total Sales:", sales)
-    # st.write("Total Revenue:", revenue)
-    # st.write("Total Valuation:", valuation)
-    # st.write("Owners Equity:", equity)
+ 
+
+
+def evaluate_investability(text):
+    # Preprocess text by removing non-alphanumeric characters and short words
+    text = re.sub(r'\W+', ' ', text)
+    text = ' '.join([word for word in text.split() if len(word) > 3])
+    
+    # Use GPT-3 to generate a score indicating the investability of the business
+    prompt = "Evaluate the investability of the following business:\n" + text + "\nInvestability score:"
+    response = openai.Completion.create(
+        engine="text-davinci-002",
+        prompt=prompt,
+        temperature=0.5,
+        max_tokens=50,
+        n=1,
+        stop=None,
+        timeout=10,
+    )
+    investability_score = response.choices[0].text.strip()
+    
+    return investability_score
+
+
+def convert_to_float(value):
+    if value == '':
+        return 0.0
+    value = value.replace('$', '').replace(',', '')
+    if value[-1] == 'M':
+        return float(value[:-1]) * 1000000
+    elif value[-1] == 'B':
+        return float(value[:-1]) * 1000000000
+    else:
+        return float(value)
