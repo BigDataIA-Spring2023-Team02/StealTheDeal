@@ -209,3 +209,27 @@ def create_donut_chart(investability_score):
     )
 
     return fig
+
+
+def brief_summary(information):    
+    max_length = 1000
+    chunks = re.findall(r'.{1,%d}\b(?!\S)' % max_length, information)
+    
+    prompt = (
+        "Give me brief description summary of the proposal for the following information:\n"
+    )
+    
+    outputs = []
+    for chunk in chunks:
+        response = openai.Completion.create(
+            engine = "text-davinci-002",
+            prompt = prompt + chunk,
+            max_tokens = 1024,
+            n = 1,
+            stop = None,
+            temperature = 0.5,
+        )
+        outputs.append(response.choices[0].text.strip())
+    
+    summary = "\n".join(outputs)
+    return summary
