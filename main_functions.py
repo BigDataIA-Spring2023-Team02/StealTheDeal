@@ -140,6 +140,9 @@ def process_file(mime_type, client, processor_name, uploaded_file, credentials):
     st.plotly_chart(fig)
     invest = evaluate_investability(text)
     st.write(invest)
+    st.write(f"Investability Score: {invest}")
+    donut_chart = create_donut_chart(invest)
+    st.plotly_chart(donut_chart)
     return info
     
  
@@ -161,7 +164,7 @@ def evaluate_investability(text):
         stop=None,
         timeout=10,
     )
-    investability_score = response.choices[0].text.strip()
+    investability_score = float(response.choices[0].text.strip())
     
     return investability_score
 
@@ -198,6 +201,21 @@ def create_graph(output_dict):
         yaxis_title='Amount ($)',
         legend_title='Metrics',
         plot_bgcolor='rgba(255, 255, 255, 1)',
+    )
+
+    return fig
+
+def create_donut_chart(investability_score):
+    fig = go.Figure(go.Pie(
+        labels=['Investability Score', 'Remaining'],
+        values=[investability_score, 10 - investability_score],
+        hole=.3,
+        marker_colors=['#00b894', '#d3d3d3']
+    ))
+
+    fig.update_layout(
+        title='Investability Score (Out of 10)',
+        legend_title='Score',
     )
 
     return fig
