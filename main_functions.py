@@ -14,6 +14,7 @@ import plotly.express as px
 import pandas as pd
 import matplotlib.pyplot as plt
 import locale
+import plotly.graph_objects as go
 
 
 def setup_client():
@@ -106,9 +107,9 @@ def extract_info(text):
             output_dict["Revenue"].append(revenue)
             output_dict["Valuation"].append(valuation)
             output_dict["Equity"].append(equity)
-            for key in output_dict:
-                 output_dict[key] = [convert_to_float(value) for value in output_dict[key]]
-    return output_dict
+
+    return output_dict  # Return the output_dict instead of the undefined variable 'info'
+
 
     
    
@@ -135,6 +136,8 @@ def process_file(mime_type, client, processor_name, uploaded_file, credentials):
     
     info = extract_info(text)
     st.write(info)
+    fig = create_graph(info)
+    st.plotly_chart(fig)
     invest = evaluate_investability(text)
     st.write(invest)
     return info
@@ -173,3 +176,28 @@ def convert_to_float(value):
         return float(value[:-1]) * 1000000000
     else:
         return float(value)
+
+
+def create_graph(output_dict):
+    # Process the values and convert them to numbers if needed
+    for key in output_dict:
+        output_dict[key] = [convert_to_float(value) for value in output_dict[key]]
+
+    # Create a DataFrame from the dictionary
+    df = pd.DataFrame(output_dict, columns=output_dict.keys())
+
+    # Create a bar chart using Plotly
+    fig = go.Figure()
+
+    for col in df.columns:
+        fig.add_trace(go.Bar(x=[col], y=[df[col].sum()], name=col))
+
+    fig.update_layout(
+        title='Financial Overview',
+        xaxis_title='Metrics',
+        yaxis_title='Amount ($)',
+        legend_title='Metrics',
+        plot_bgcolor='rgba(255, 255, 255, 1)',
+    )
+
+    return fig
