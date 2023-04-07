@@ -16,7 +16,8 @@ Streamlit:
 Codelabs: https://codelabs-preview.appspot.com/?file_id=1JUiP2P7-XNgthY3x2lD1vF1hmEAjJAJNVtv9sY-R9J8#3
 
 # StealTheDeal
-* Seal the Deal on Your Next Investment
+## Seal the Deal on Your Next Investment
+
 The goal of this application is to develop an investment evaluation application that can assist investors in determining the viability of investment proposals. This application will allow users to upload proposals in any format and provide a clear assessment of whether the proposal is worth investing in or not. By leveraging sophisticated algorithms and machine learning techniques, the application will analyze the proposal and provide a comprehensive evaluation that takes into account various factors such as market demand, financial viability, and risk assessment. With this application, investors can make more informed investment decisions and minimize their exposure to potential losses.
 
 # Installation
