@@ -16,7 +16,13 @@ if st.session_state.information is not None:
     st.plotly_chart(fig)
     
     investability = evaluate_investability(processed_text)
-    st.write('Investability Score:',investability)
+    if investability >= 7:
+        st.success(f"Investability Score: {investability}")
+    elif investability >= 4:
+        st.warning(f"Investability Score: {investability}")
+    else:
+        st.error(f"Investability Score: {investability}")
+    
     st.write('')
     
     donut_chart = create_donut_chart(investability)
