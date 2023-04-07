@@ -56,7 +56,19 @@ def lemmatize_text(text):
     return lemmatized_text
 
 
-def extract_info(text):    
+def extract_info(selected_file,credentials):   
+
+    # Define the filename variable
+    filename = selected_file
+
+    # Download the file from Google Cloud Storage
+    storage_project_id = os.environ.get('project_id')
+    bucket_name = os.environ.get('bucket_name')
+    storage_client = storage.Client(project=storage_project_id, credentials=credentials)
+    bucket = storage_client.get_bucket(bucket_name)
+    
+    blob = bucket.blob(f'extract/{filename}')
+    text = blob.download_as_text() 
     max_length = 1000
     chunks = re.findall(r'.{1,%d}\b(?!\S)' % max_length, text)
     
@@ -103,7 +115,29 @@ def extract_info(text):
             output_dict["Valuation"].append(valuation)
             output_dict["Equity"].append(equity)
 
-    return output_dict
+    return output_dict, text
+
+
+def upload_file(uploaded_file, credentials):
+    # Upload the original file to GCS
+    storage_project_id = os.environ.get('project_id')
+    bucket_name = os.environ.get('bucket_name')
+    storage_client = storage.Client(project = storage_project_id, credentials = credentials)
+    bucket = storage_client.get_bucket(bucket_name)
+    blob = bucket.blob('docs/' + uploaded_file.name)
+    blob.upload_from_string(uploaded_file.getvalue())
+    
+
+def list_uploaded_file(credentials):
+    storage_project_id = os.environ.get('project_id')
+    bucket_name = os.environ.get('bucket_name')
+    storage_client = storage.Client(project = storage_project_id, credentials = credentials)
+    bucket = storage_client.get_bucket(bucket_name)
+    
+    blobs = bucket.list_blobs(prefix='extract/')
+    files = [blob.name.split('/')[1] for blob in blobs]
+    
+    return files
 
 
 def process_file(mime_type, client, processor_name, uploaded_file, credentials):
@@ -116,30 +150,25 @@ def process_file(mime_type, client, processor_name, uploaded_file, credentials):
     response = client.process_document(request={'name': name, 'document': document})
     document = response.document
     text = document.text
+    text = lemmatize_text(text)
 
     # Upload the extracted text to GCS
     storage_project_id = os.environ.get('project_id')
     bucket_name = os.environ.get('bucket_name')
     storage_client = storage.Client(project = storage_project_id, credentials = credentials)
     bucket = storage_client.get_bucket(bucket_name)
-    blob = bucket.blob('extract/extracted_text.txt')
+    extracted_text_filename = 'extracted_' + uploaded_file.name.split('.')[0] + '.txt'
+    blob = bucket.blob('extract/' + extracted_text_filename)
     blob.upload_from_string(text)
-    text = lemmatize_text(text)
     
-    # info = extract_info(text)
-    # st.write(info)
-    # fig = create_graph(info)
-    # st.plotly_chart(fig)
-    # invest = evaluate_investability(text)
-    # st.write(invest)
-    # st.write(f"Investability Score: {invest}")
-    # donut_chart = create_donut_chart(invest)
-    # st.plotly_chart(donut_chart)
+    
     return text
 
 
 def evaluate_investability(text):
     # Preprocess text by removing non-alphanumeric characters and short words
+    if not isinstance(text, str):
+        return 0
     text = re.sub(r'\W+', ' ', text)
     text = ' '.join([word for word in text.split() if len(word) > 3])
     
@@ -160,13 +189,32 @@ def evaluate_investability(text):
 
 
 def convert_to_float(value):
-    if value == '':
+    if value == '' or value is None:
         return 0.0
-    value = value.replace('$', '').replace(',', '')
-    if value[-1] == 'M':
-        return float(value[:-1]) * 1000000
-    elif value[-1] == 'B':
-        return float(value[:-1]) * 1000000000
+    
+    if isinstance(value, str):
+        value = value.replace('$', '').replace(',', '')
+
+        if value[-1] == 'M':
+            return float(value[:-1]) * 1000000
+        elif value[-1] == 'B':
+            return float(value[:-1]) * 1000000000
+        else:
+            # Handle cases like '5 million'
+            match = re.search(r'([\d.]+)\s*(million|billion|M|B)?', value)
+            if match:
+                num = float(match.group(1))
+                unit = match.group(2)
+                if unit:
+                    if unit.lower() == 'million' or unit.lower() == 'm':
+                        return num * 1000000
+                    elif unit.lower() == 'billion' or unit.lower() == 'b':
+                        return num * 1000000000
+                else:
+                    return num
+            else:
+                return 0.0
+    
     else:
         return float(value)
 
@@ -179,21 +227,37 @@ def create_graph(output_dict):
     # Create a DataFrame from the dictionary
     df = pd.DataFrame(output_dict, columns=output_dict.keys())
 
-    # Create a bar chart using Plotly
-    fig = go.Figure()
+    sums = [df[col].sum() for col in df.columns]
 
-    for col in df.columns:
-        fig.add_trace(go.Bar(x=[col], y=[df[col].sum()], name=col))
+    # Create a bar chart with the sums of each key
+    fig = go.Figure(data=[
+        go.Bar(name='Sales', x=df.columns, y=sums)
+    ])
 
     fig.update_layout(
-        title='Financial Overview',
+        title='Metrics Overview',
         xaxis_title='Metrics',
-        yaxis_title='Amount ($)',
-        legend_title='Metrics',
-        plot_bgcolor='rgba(255, 255, 255, 1)',
+        yaxis_title='Value',
     )
 
     return fig
+
+
+def create_bar_chart(investability_score):
+    fig = go.Figure(data=[
+        go.Bar(name='Investability Score', x=['Investability Score'], y=[investability_score]),
+        go.Bar(name='Remaining', x=['Remaining'], y=[10 - investability_score])
+    ])
+
+    fig.update_layout(
+        title='Investability Score (Out of 10)',
+        xaxis_title='Score',
+        yaxis_title='Value',
+        barmode='stack',
+    )
+
+    return fig
+
 
 def create_donut_chart(investability_score):
     fig = go.Figure(go.Pie(
@@ -216,7 +280,7 @@ def brief_summary(information):
     chunks = re.findall(r'.{1,%d}\b(?!\S)' % max_length, information)
     
     prompt = (
-        "Give me brief description summary of the proposal for the following information:\n"
+        "Give me 1 strong points for  :\n"
     )
     
     outputs = []
