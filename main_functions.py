@@ -1,20 +1,15 @@
 import os
 import re
-import nltk
 import openai
+import pandas as pd
 from dotenv import load_dotenv
+import plotly.graph_objs as go
+import plotly.graph_objects as go
 from google.cloud import storage
 from nltk.stem import WordNetLemmatizer
 from google.oauth2 import service_account
 from nltk.tokenize import word_tokenize, sent_tokenize
 from google.cloud import documentai_v1beta3 as documentai
-import streamlit as st
-import plotly.graph_objs as go
-import plotly.express as px
-import pandas as pd
-import matplotlib.pyplot as plt
-import locale
-import plotly.graph_objects as go
 
 
 def setup_client():
@@ -32,6 +27,7 @@ def setup_client():
     openai.api_key = os.environ.get('openai.api_key')
     
     return client, processor_name, credentials
+
 
 def lemmatize_text(text):
     """Lemmatize the extracted text."""
@@ -56,9 +52,8 @@ def lemmatize_text(text):
     
     # Join the lemmatized sentences back into a single string
     lemmatized_text = " ".join(lemmatized_sentences)
+    
     return lemmatized_text
-
-
 
 
 def extract_info(text):    
@@ -108,11 +103,8 @@ def extract_info(text):
             output_dict["Valuation"].append(valuation)
             output_dict["Equity"].append(equity)
 
-    return output_dict  # Return the output_dict instead of the undefined variable 'info'
+    return output_dict
 
-
-    
-   
 
 def process_file(mime_type, client, processor_name, uploaded_file, credentials):
     """Process a file through the Document AI parser."""
@@ -134,18 +126,16 @@ def process_file(mime_type, client, processor_name, uploaded_file, credentials):
     blob.upload_from_string(text)
     text = lemmatize_text(text)
     
-    info = extract_info(text)
-    st.write(info)
-    fig = create_graph(info)
-    st.plotly_chart(fig)
-    invest = evaluate_investability(text)
-    st.write(invest)
-    st.write(f"Investability Score: {invest}")
-    donut_chart = create_donut_chart(invest)
-    st.plotly_chart(donut_chart)
-    return info
-    
- 
+    # info = extract_info(text)
+    # st.write(info)
+    # fig = create_graph(info)
+    # st.plotly_chart(fig)
+    # invest = evaluate_investability(text)
+    # st.write(invest)
+    # st.write(f"Investability Score: {invest}")
+    # donut_chart = create_donut_chart(invest)
+    # st.plotly_chart(donut_chart)
+    return text
 
 
 def evaluate_investability(text):
